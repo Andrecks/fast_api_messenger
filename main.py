@@ -1,44 +1,25 @@
-#Twitter: Bek Brace
-#Instagram: Bek Brace
-
-import uvicorn
+# import uvicorn
 from fastapi import FastAPI, Body, Depends
 
+from db_control import db_control
 from app.model import PostSchema, UserSchema, UserLoginSchema
 from app.auth.auth_bearer import JWTBearer
 from app.auth.auth_handler import signJWT
+import phonenumbers
+import uvicorn
 
-
-posts = [
-    {
-        "id": 1,
-        "title": "Penguins ",
-        "text": "Penguins are a group of aquatic flightless birds."
-    },
-    {
-        "id": 2,
-        "title": "Tigers ",
-        "text": "Tigers are the largest living cat species and a memeber of the genus panthera."
-    },
-    {
-        "id": 3,
-        "title": "Koalas ",
-        "text": "Koala is arboreal herbivorous maruspial native to Australia."
-    },
-]
-
-users = []
+db_class = db_control()
 
 app = FastAPI()
 
 
 
-def check_user(data: UserLoginSchema):
-    for user in users:
-        if user.email == data.email and user.password == data.password:
-            return True
-    return False
-
+def verify_phone_number(phone_number: str) -> bool:
+    try:
+        parsed_number = phonenumbers.parse(phone_number)
+        return phonenumbers.is_valid_number(parsed_number) and phonenumbers.is_possible_number(parsed_number)
+    except phonenumbers.phonenumberutil.NumberParseException:
+        return False
 
 # route handlers
 
@@ -48,10 +29,10 @@ def greet():
     return {"hello": "world!."}
 
 
-# Get Posts
-@app.get("/posts", tags=["posts"])
-def get_posts():
-    return { "data": posts }
+# # Get Posts
+# @app.get("/posts", tags=["posts"])
+# def get_posts():
+#     return { "data": posts }
 
 
 @app.get("/posts/{id}", tags=["posts"])
@@ -79,14 +60,29 @@ def add_post(post: PostSchema):
 
 @app.post("/user/signup", tags=["user"])
 def create_user(user: UserSchema = Body(...)):
-    users.append(user) # replace with db call, making sure to hash the password first
-    return signJWT(user.email)
+    
+    if db_class.check_user_exists(user.phone):
+        return {
+        "error": "указанный номер телефона уже зарегестрирован"
+        }
+    
+    if verify_phone_number(user.phone):
+        # users.append(user) # replace with db call, making sure to hash the password first
+        return signJWT(user.phone)
+    return {
+        "error": "номер телефона указан некорректно"
+    }
+        
 
 
 @app.post("/user/login", tags=["user"])
-def user_login(user: UserLoginSchema = Body(...)):
-    if check_user(user):
-        return signJWT(user.email)
+def user_login(user: UserSchema = Body(...)):
+    if check_user(user.phone):
+        return signJWT(user.phone)
     return {
         "error": "Wrong login details!"
     }
+
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", log_level="info", reload=True)
